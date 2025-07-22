@@ -1,29 +1,53 @@
-package com.hashedin.huspark.service;
+package com.hashedin.huspark.security;
 
-import com.hashedin.huspark.entity.User;
-import com.hashedin.huspark.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.*;
-import org.springframework.stereotype.Service;
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.stereotype.Component;
 
-import java.util.Collections;
+import java.security.Key;
+import java.util.Date;
 
-@Service
-@RequiredArgsConstructor
-public class CustomUserDetailsService implements UserDetailsService {
+@Component
+public class JwtUtil {
 
-    private final UserRepository userRepository;
+    private final String secret = "my-secret-key-my-secret-key-my-secret-key"; // 256-bit key
+    private final long expiration = 86400000; // 1 day
 
-    @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
 
-        return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                user.getPassword(),
-                Collections.singleton(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
-        );
+    public String generateToken(String username, String role) {
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("role", role)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String extractUsername(String token) {
+        return parseToken(token).getBody().getSubject();
+    }
+
+    public String extractRole(String token) {
+        return parseToken(token).getBody().get("role", String.class);
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            parseToken(token);
+            return true;
+        } catch (JwtException e) {
+            return false;
+        }
+    }
+
+    private Jws<Claims> parseToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token);
     }
 }
