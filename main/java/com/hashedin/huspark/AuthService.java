@@ -1,48 +1,50 @@
-package com.hashedin.huspark.controller;
+package com.hashedin.huspark.security;
 
-import com.hashedin.huspark.dto.CourseRequestDTO;
-import com.hashedin.huspark.dto.CourseResponseDTO;
-import com.hashedin.huspark.service.CourseService;
+import com.hashedin.huspark.service.CustomUserDetailsService;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.authentication.*;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.io.IOException;
 
-@RestController
-@RequestMapping("/api/courses")
+@Component
 @RequiredArgsConstructor
-public class CourseController {
+public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private final CourseService courseService;
+    private final JwtUtil jwtUtil;
+    private final CustomUserDetailsService userDetailsService;
 
-    @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
-    public ResponseEntity<CourseResponseDTO> createCourse(@RequestBody CourseRequestDTO dto) {
-        return ResponseEntity.ok(courseService.createCourse(dto));
-    }
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain chain) throws ServletException, IOException {
 
-    @GetMapping
-    public ResponseEntity<List<CourseResponseDTO>> getAllCourses() {
-        return ResponseEntity.ok(courseService.getAllCourses());
-    }
+        String authHeader = request.getHeader("Authorization");
 
-    @GetMapping("/{id}")
-    public ResponseEntity<CourseResponseDTO> getCourse(@PathVariable Long id) {
-        return ResponseEntity.ok(courseService.getCourseById(id));
-    }
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            chain.doFilter(request, response);
+            return;
+        }
 
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
-    public ResponseEntity<CourseResponseDTO> updateCourse(@PathVariable Long id, @RequestBody CourseRequestDTO dto) {
-        return ResponseEntity.ok(courseService.updateCourse(id, dto));
-    }
+        String token = authHeader.substring(7);
+        String username = jwtUtil.extractUsername(token);
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
-    public ResponseEntity<Void> deleteCourse(@PathVariable Long id) {
-        courseService.deleteCourse(id);
-        return ResponseEntity.noContent().build();
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            var userDetails = userDetailsService.loadUserByUsername(username);
+
+            if (jwtUtil.isTokenValid(token)) {
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+
+        chain.doFilter(request, response);
     }
 }
