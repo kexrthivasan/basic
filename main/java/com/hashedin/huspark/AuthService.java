@@ -1,66 +1,77 @@
 package com.hashedin.huspark.service;
 
-import com.hashedin.huspark.dto.*;
-import com.hashedin.huspark.entity.*;
-import com.hashedin.huspark.repository.*;
-import com.hashedin.huspark.security.JwtService;
+import com.hashedin.huspark.dto.CourseRequestDTO;
+import com.hashedin.huspark.dto.CourseResponseDTO;
+import com.hashedin.huspark.entity.Course;
+import com.hashedin.huspark.entity.User;
+import com.hashedin.huspark.repository.CourseRepository;
+import com.hashedin.huspark.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.*;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+public class CourseService {
 
-    private final UserRepository userRepo;
-    private final BlacklistedTokenRepository blacklistedTokenRepo;
-    private final JwtService jwtService;
-    private final AuthenticationManager authManager;
-    private final PasswordEncoder passwordEncoder;
+    private final CourseRepository courseRepository;
+    private final UserRepository userRepository;
 
-    public AuthResponse register(RegisterRequest request) {
-        if (userRepo.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already registered.");
-        }
-
-        User user = User.builder()
-                .username(request.getUsername())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
-                .build();
-
-        userRepo.save(user);
-
-        String token = jwtService.generateToken(user.getEmail(), user.getRole());
-
-        return AuthResponse.builder().token(token).build();
-    }
-
-    public AuthResponse login(AuthRequest request) {
-        authManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        User user = userRepo.findByEmail(request.getEmail())
+    public CourseResponseDTO createCourse(CourseRequestDTO dto) {
+        User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        String token = jwtService.generateToken(user.getEmail(), user.getRole());
+        Course course = Course.builder()
+                .title(dto.getTitle())
+                .description(dto.getDescription())
+                .videoUrl(dto.getVideoUrl())
+                .user(user)
+                .build();
 
-        return AuthResponse.builder().token(token).build();
+        Course saved = courseRepository.save(course);
+        return toDTO(saved);
     }
 
-    public String logout(String token) {
-        if (!jwtService.isTokenValid(token)) {
-            throw new RuntimeException("Invalid token.");
-        }
+    public CourseResponseDTO updateCourse(Long id, CourseRequestDTO dto) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Course not found"));
 
-        if (blacklistedTokenRepo.existsByToken(token)) {
-            return "Token already blacklisted.";
-        }
+        course.setTitle(dto.getTitle());
+        course.setDescription(dto.getDescription());
+        course.setVideoUrl(dto.getVideoUrl());
 
-        blacklistedTokenRepo.save(BlacklistedToken.builder().token(token).build());
-        return "Logout successful.";
+        Course updated = courseRepository.save(course);
+        return toDTO(updated);
+    }
+
+    public CourseResponseDTO getCourseById(Long id) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Course not found"));
+        return toDTO(course);
+    }
+
+    public List<CourseResponseDTO> getAllCourses() {
+        return courseRepository.findAll().stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    public void deleteCourse(Long id) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Course not found"));
+        courseRepository.delete(course);
+    }
+
+    private CourseResponseDTO toDTO(Course course) {
+        CourseResponseDTO dto = new CourseResponseDTO();
+        dto.setId(course.getId());
+        dto.setTitle(course.getTitle());
+        dto.setDescription(course.getDescription());
+        dto.setVideoUrl(course.getVideoUrl());
+        dto.setUserId(course.getUser().getId());
+        dto.setUserName(course.getUser().getUserName());
+        return dto;
     }
 }
