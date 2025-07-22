@@ -7,6 +7,7 @@ import com.hashedin.huspark.entity.User;
 import com.hashedin.huspark.repository.CourseRepository;
 import com.hashedin.huspark.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -18,17 +19,14 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final ModelMapper modelMapper;
 
     public CourseResponseDTO createCourse(CourseRequestDTO dto) {
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        Course course = Course.builder()
-                .title(dto.getTitle())
-                .description(dto.getDescription())
-                .videoUrl(dto.getVideoUrl())
-                .user(user)
-                .build();
+        Course course = modelMapper.map(dto, Course.class);
+        course.setUser(user);
 
         Course saved = courseRepository.save(course);
         return toDTO(saved);
@@ -38,10 +36,7 @@ public class CourseService {
         Course course = courseRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Course not found"));
 
-        course.setTitle(dto.getTitle());
-        course.setDescription(dto.getDescription());
-        course.setVideoUrl(dto.getVideoUrl());
-
+        modelMapper.map(dto, course); // update fields from DTO
         Course updated = courseRepository.save(course);
         return toDTO(updated);
     }
@@ -65,11 +60,7 @@ public class CourseService {
     }
 
     private CourseResponseDTO toDTO(Course course) {
-        CourseResponseDTO dto = new CourseResponseDTO();
-        dto.setId(course.getId());
-        dto.setTitle(course.getTitle());
-        dto.setDescription(course.getDescription());
-        dto.setVideoUrl(course.getVideoUrl());
+        CourseResponseDTO dto = modelMapper.map(course, CourseResponseDTO.class);
         dto.setUserId(course.getUser().getId());
         dto.setUserName(course.getUser().getUserName());
         return dto;
