@@ -1,50 +1,35 @@
-package com.hashedin.huspark.controller;
-
-import com.hashedin.huspark.dto.*;
-import com.hashedin.huspark.entity.User;
-import com.hashedin.huspark.repository.UserRepository;
-import com.hashedin.huspark.security.JwtUtil;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.*;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/auth")
+@Configuration
+@EnableMethodSecurity(prePostEnabled = true) // This enables @PreAuthorize
 @RequiredArgsConstructor
-public class AuthController {
+public class SecurityConfig {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtUtil jwtUtil;
+    private final JwtAuthFilter jwtAuthFilter;
+    private final CustomUserDetailsService userDetailsService;
 
-    @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
-        User user = User.builder()
-                .userName(request.getUserName())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole())
-                .build();
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authenticationProvider(authProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
-        userRepository.save(user);
-
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
-        return ResponseEntity.ok(new AuthResponse(token));
+        return http.build();
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+    @Bean
+    public AuthenticationProvider authProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        String token = jwtUtil.generateToken(user.getEmail(), user.getRole().name());
-        return ResponseEntity.ok(new AuthResponse(token));
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
