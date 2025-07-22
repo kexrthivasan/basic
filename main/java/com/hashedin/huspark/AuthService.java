@@ -1,50 +1,29 @@
-package com.hashedin.huspark.security;
+package com.hashedin.huspark.service;
 
-import com.hashedin.huspark.service.CustomUserDetailsService;
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
+import com.hashedin.huspark.entity.User;
+import com.hashedin.huspark.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.*;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.*;
+import org.springframework.stereotype.Service;
 
-import java.io.IOException;
+import java.util.Collections;
 
-@Component
+@Service
 @RequiredArgsConstructor
-public class JwtAuthFilter extends OncePerRequestFilter {
+public class CustomUserDetailsService implements UserDetailsService {
 
-    private final JwtUtil jwtUtil;
-    private final CustomUserDetailsService userDetailsService;
+    private final UserRepository userRepository;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        String authHeader = request.getHeader("Authorization");
-
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        String token = authHeader.substring(7);
-        String username = jwtUtil.extractUsername(token);
-
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            var userDetails = userDetailsService.loadUserByUsername(username);
-
-            if (jwtUtil.isTokenValid(token)) {
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
-        }
-
-        chain.doFilter(request, response);
+        return new org.springframework.security.core.userdetails.User(
+                user.getEmail(),
+                user.getPassword(),
+                Collections.singleton(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+        );
     }
 }
