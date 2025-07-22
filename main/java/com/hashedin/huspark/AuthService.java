@@ -1,68 +1,48 @@
-package com.hashedin.huspark.service;
+package com.hashedin.huspark.controller;
 
 import com.hashedin.huspark.dto.CourseRequestDTO;
 import com.hashedin.huspark.dto.CourseResponseDTO;
-import com.hashedin.huspark.entity.Course;
-import com.hashedin.huspark.entity.User;
-import com.hashedin.huspark.repository.CourseRepository;
-import com.hashedin.huspark.repository.UserRepository;
+import com.hashedin.huspark.service.CourseService;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
-import org.springframework.stereotype.Service;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
-@Service
+@RestController
+@RequestMapping("/api/courses")
 @RequiredArgsConstructor
-public class CourseService {
+public class CourseController {
 
-    private final CourseRepository courseRepository;
-    private final UserRepository userRepository;
-    private final ModelMapper modelMapper;
+    private final CourseService courseService;
 
-    public CourseResponseDTO createCourse(CourseRequestDTO dto) {
-        User user = userRepository.findById(dto.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        Course course = modelMapper.map(dto, Course.class);
-        course.setUser(user);
-
-        Course saved = courseRepository.save(course);
-        return toDTO(saved);
+    @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
+    public ResponseEntity<CourseResponseDTO> createCourse(@RequestBody CourseRequestDTO dto) {
+        return ResponseEntity.ok(courseService.createCourse(dto));
     }
 
-    public CourseResponseDTO updateCourse(Long id, CourseRequestDTO dto) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Course not found"));
-
-        modelMapper.map(dto, course); // update fields from DTO
-        Course updated = courseRepository.save(course);
-        return toDTO(updated);
+    @GetMapping
+    public ResponseEntity<List<CourseResponseDTO>> getAllCourses() {
+        return ResponseEntity.ok(courseService.getAllCourses());
     }
 
-    public CourseResponseDTO getCourseById(Long id) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Course not found"));
-        return toDTO(course);
+    @GetMapping("/{id}")
+    public ResponseEntity<CourseResponseDTO> getCourse(@PathVariable Long id) {
+        return ResponseEntity.ok(courseService.getCourseById(id));
     }
 
-    public List<CourseResponseDTO> getAllCourses() {
-        return courseRepository.findAll().stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
+    public ResponseEntity<CourseResponseDTO> updateCourse(@PathVariable Long id, @RequestBody CourseRequestDTO dto) {
+        return ResponseEntity.ok(courseService.updateCourse(id, dto));
     }
 
-    public void deleteCourse(Long id) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Course not found"));
-        courseRepository.delete(course);
-    }
-
-    private CourseResponseDTO toDTO(Course course) {
-        CourseResponseDTO dto = modelMapper.map(course, CourseResponseDTO.class);
-        dto.setUserId(course.getUser().getId());
-        dto.setUserName(course.getUser().getUserName());
-        return dto;
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','INSTRUCTOR')")
+    public ResponseEntity<Void> deleteCourse(@PathVariable Long id) {
+        courseService.deleteCourse(id);
+        return ResponseEntity.noContent().build();
     }
 }
